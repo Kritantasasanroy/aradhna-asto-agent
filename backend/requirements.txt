@@ -1,0 +1,25 @@
+# Agent framework
+langgraph>=0.2.0
+langchain>=0.2.0
+langchain-openai>=0.1.20
+langchain-community>=0.2.0
+
+# API server
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.1
+pydantic>=2.7.0
+
+# Ephemeris — real planetary positions, not guesses
+pyswisseph>=2.10.3.1
+
+# Geocoding + timezone resolution
+geopy>=2.4.1
+timezonefinder>=6.5.0
+
+# RAG knowledge base
+chromadb>=0.5.0
+sentence-transformers>=3.0.0
+
+# Eval harness HTTP calls
+httpx>=0.27.0
