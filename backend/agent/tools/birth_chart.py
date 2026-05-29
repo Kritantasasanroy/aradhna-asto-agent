@@ -95,10 +95,11 @@ def compute_birth_chart(
         # Placidus house system — most widely used in Western astrology
         cusps, ascmc = swe.houses(jd, lat, lng, b"P")
 
+        # pyswisseph returns 12 cusps (indices 0–11), one per house
         houses: dict[str, dict] = {}
-        for i in range(1, 13):
+        for i in range(12):
             sign, degree = _longitude_to_sign(cusps[i])
-            houses[f"house_{i}"] = {
+            houses[f"house_{i + 1}"] = {
                 "sign": sign,
                 "degree": degree,
                 "longitude": round(cusps[i], 4),
