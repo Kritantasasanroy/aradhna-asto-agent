@@ -13,3 +13,5 @@ chroma_db/
 .pytest_cache/
 .mypy_cache/
 results/*.csv
+*.db
+*.zip
