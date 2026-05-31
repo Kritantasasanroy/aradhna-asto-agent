@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
 from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
@@ -114,3 +116,9 @@ def get_session(session_id: str):
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.2.0"}
+
+
+# Serve the frontend — must come last so API routes take priority
+_FRONTEND = Path(__file__).parent.parent.parent / "frontend"
+if _FRONTEND.exists():
+    app.mount("/", StaticFiles(directory=_FRONTEND, html=True), name="frontend")

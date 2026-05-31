@@ -1,0 +1,155 @@
+/* ============================================================
+   Aradhana — a daily spiritual astrology companion
+   Design tokens + base styles + keyframe library
+   ============================================================ */
+
+:root {
+  /* Core palette */
+  --base:        #0B0F1A;   /* deep cosmic navy */
+  --panel:       #0F1525;   /* left panel, slightly lifted */
+  --panel-2:     #121A2E;   /* inputs / cards */
+  --violet:      #3D2B6B;   /* primary accent */
+  --violet-soft: rgba(61, 43, 107, 0.42);
+  --gold:        #C9A84C;   /* highlights, celestial */
+  --gold-soft:   rgba(201, 168, 76, 0.16);
+  --flame:       #F23602;   /* brand lotus */
+  --flame-soft:  rgba(242, 54, 2, 0.16);
+  --ivory:       #F4EFE6;   /* primary text */
+  --ivory-dim:   rgba(244, 239, 230, 0.62);
+  --ivory-faint: rgba(244, 239, 230, 0.34);
+  --hairline:    rgba(244, 239, 230, 0.10);
+  --hairline-2:  rgba(244, 239, 230, 0.16);
+  --error:       #D98A6A;   /* soft red-amber */
+
+  /* Type */
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --sans:  "DM Sans", system-ui, sans-serif;
+  --mono:  "Space Mono", ui-monospace, monospace;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--base);
+  color: var(--ivory);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#root { height: 100%; }
+
+::selection { background: var(--gold-soft); color: var(--ivory); }
+
+/* Slim, dark scrollbars */
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(244, 239, 230, 0.10);
+  border-radius: 99px;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(244, 239, 230, 0.18); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* ============================================================
+   KEYFRAMES
+   ============================================================ */
+
+/* logo: lotus stroke draws on */
+@keyframes drawStroke {
+  to { stroke-dashoffset: 0; }
+}
+
+/* logo: whole lotus blooms open from center */
+@keyframes bloomIn {
+  from { transform: scale(0.55); opacity: 0; }
+  60%  { opacity: 1; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* logo: orbit ring slow rotation */
+@keyframes orbitSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* header lotus thinking spin (slow) */
+@keyframes lotusThink {
+  to { transform: rotate(360deg); }
+}
+
+/* gold shimmer sweep across text, once */
+@keyframes shimmerSweep {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+
+/* generic fade-in-up for staggered logo parts */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* message entrance */
+@keyframes msgRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* star field drift layers */
+@keyframes driftA { to { transform: translate3d(-120px, 40px, 0); } }
+@keyframes driftB { to { transform: translate3d(-260px, -90px, 0); } }
+@keyframes driftC { to { transform: translate3d(-420px, 60px, 0); } }
+
+/* twinkle pulse for foreground stars */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* nebula breathing */
+@keyframes breathe {
+  0%, 100% { opacity: 0.28; transform: scale(1); }
+  50%      { opacity: 0.5;  transform: scale(1.08); }
+}
+
+/* tool chip glow pulse */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--hairline-2), 0 0 24px rgba(201,168,76,0.06); }
+  50%      { box-shadow: 0 0 0 1px rgba(201,168,76,0.30), 0 0 36px rgba(201,168,76,0.18); }
+}
+
+/* three dots */
+@keyframes dotBounce {
+  0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%           { opacity: 1;    transform: translateY(-3px); }
+}
+
+/* submit orbit spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* location pin pulse, once */
+@keyframes pinPulse {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+/* button shimmer on hover */
+@keyframes btnShimmer {
+  to { background-position: 200% 0; }
+}
+
+/* toast slide down */
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+}

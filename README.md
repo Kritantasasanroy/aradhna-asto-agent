@@ -39,6 +39,16 @@ START → router → reasoning ──→ tools → cache_chart → reasoning (lo
 ## Project structure
 
 ```
+frontend/
+  index.html      — app entry point (served at http://localhost:8000/)
+  aradhana.css    — design tokens, keyframes, base styles
+  cosmic.jsx      — animated star field + nebula background
+  logo.jsx        — lotus mark + full logo lockup with orbit ring
+  form.jsx        — birth details sidebar (date, time, place inputs)
+  chat.jsx        — chat panel, message bubbles, tool activity chip
+  agent.jsx       — SSE transport with offline mock fallback
+  app.jsx         — root layout, session wiring, mobile drawer
+
 backend/
   agent/
     state.py      — AgentState, BirthDetails types
@@ -52,7 +62,7 @@ backend/
       transits.py     — get_daily_transits()
       knowledge.py    — knowledge_lookup() via ChromaDB + sentence-transformers
   api/
-    main.py       — FastAPI, SSE /chat endpoint, GET /session/{id}, startup DB init
+    main.py       — FastAPI, SSE /chat endpoint, GET /session/{id}, static frontend
   db/
     sessions.py   — SQLite session store (load/save conversation history + chart cache)
   data/
@@ -97,6 +107,29 @@ uvicorn api.main:app --reload
 ```
 
 API runs at `http://localhost:8000`. Hit `/health` to confirm.
+
+---
+
+## Frontend
+
+The UI is a zero-build React app that the FastAPI server serves automatically at `http://localhost:8000/`.
+
+```
+frontend/
+  index.html    — entry point
+  aradhana.css  — design tokens, keyframes, base styles
+  cosmic.jsx    — animated star field background
+  logo.jsx      — lotus mark + full Aradhana logo lockup
+  form.jsx      — birth details sidebar (date, time, place)
+  chat.jsx      — chat panel, message bubbles, tool activity chip
+  agent.jsx     — SSE transport + offline mock astrologer fallback
+  app.jsx       — root layout, session state, mobile drawer
+  Logo.svg      — lotus favicon
+```
+
+No `npm install`, no build step. Babel compiles the JSX in the browser. Open the app at `http://localhost:8000/` once the server is running.
+
+If the backend is unreachable (e.g. opening the HTML file directly), `agent.jsx` falls back to a built-in mock astrologer so the UI still feels alive during design review.
 
 ---
 
@@ -161,7 +194,7 @@ The `GET /session/{session_id}` endpoint returns session metadata (has_chart, bi
 - Birth time is required for accurate house cusps and Ascendant. When missing, the agent defaults to noon and notes the limitation.
 - Geocoding uses Nominatim (OpenStreetMap). Very small or ambiguous place names may not resolve — the agent asks the user to clarify.
 - The LLM judge in the eval is validated by spot-checking 10 verdicts manually. See EVALUATION.md.
-- No frontend included here — UI is handled separately.
+- The UI uses in-browser Babel to compile JSX — no build step required, but it is slower to load than a pre-built bundle. For production, run it through Vite or a similar bundler.
 
 ---
 
