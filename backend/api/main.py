@@ -37,15 +37,35 @@ class ChatRequest(BaseModel):
     birth_details: Optional[BirthDetails] = None
 
 
+_EMPTY_GREETING = (
+    "Hello, I'm Aradhana — your astrology companion. Whenever you're ready, share "
+    "your birth date, time, and place, and ask me anything: your chart, the energy "
+    "of today, your rising sign. What would you like to explore?"
+)
+
+
+def _last_ai_text(messages: list) -> str:
+    """Return the text of the last AI message, or '' if there isn't one."""
+    for msg in reversed(messages):
+        if getattr(msg, "type", None) == "ai":
+            content = msg.content
+            return content if isinstance(content, str) else ""
+    return ""
+
+
 async def stream_agent(req: ChatRequest) -> AsyncIterator[str]:
     session_id = req.session_id or str(uuid.uuid4())
 
-    # load existing session so the agent remembers prior turns
+    yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
+
+    if not req.message.strip():
+        yield f"data: {json.dumps({'type': 'token', 'content': _EMPTY_GREETING})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+        return
+
     session = load_session(session_id)
     history = session["messages"] if session else []
     cached_chart = session["birth_chart"] if session else None
-
-    # request birth_details take priority; fall back to what's in the session
     birth_details = req.birth_details or (session["birth_details"] if session else None)
 
     initial_state: AgentState = {
@@ -58,55 +78,75 @@ async def stream_agent(req: ChatRequest) -> AsyncIterator[str]:
         "session_id": session_id,
     }
 
-    # send session_id upfront so the client can store it
-    yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
-
     final_messages = initial_state["messages"].copy()
     final_birth_chart = cached_chart
+    streamed_text = ""
 
-    async for event in graph.astream_events(initial_state, version="v2"):
-        kind = event.get("event")
+    try:
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event.get("event")
 
-        if kind == "on_chat_model_stream":
-            chunk = event["data"].get("chunk")
-            if chunk and chunk.content:
-                payload = {"type": "token", "content": chunk.content}
-                yield f"data: {json.dumps(payload)}\n\n"
+            if kind == "on_chat_model_stream":
+                chunk = event["data"].get("chunk")
+                if chunk and chunk.content:
+                    streamed_text += chunk.content
+                    yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
 
-        elif kind == "on_tool_start":
-            payload = {"type": "tool_start", "tool": event.get("name")}
-            yield f"data: {json.dumps(payload)}\n\n"
+            elif kind == "on_tool_start":
+                yield f"data: {json.dumps({'type': 'tool_start', 'tool': event.get('name')})}\n\n"
 
-        elif kind == "on_tool_end":
-            payload = {"type": "tool_end", "tool": event.get("name")}
-            yield f"data: {json.dumps(payload)}\n\n"
+            elif kind == "on_tool_end":
+                yield f"data: {json.dumps({'type': 'tool_end', 'tool': event.get('name')})}\n\n"
 
-        elif kind == "on_chain_end" and event.get("name") == "LangGraph":
-            output = event["data"].get("output", {})
-            if output.get("messages"):
-                final_messages = output["messages"]
-            if output.get("birth_chart"):
-                final_birth_chart = output["birth_chart"]
+            elif kind == "on_chain_end" and event.get("name") == "LangGraph":
+                output = event["data"].get("output", {})
+                if output.get("messages"):
+                    final_messages = output["messages"]
+                if output.get("birth_chart"):
+                    final_birth_chart = output["birth_chart"]
 
-    # persist after stream completes
+    except Exception as e:
+        print(f"[stream_agent] graph error: {e}")
+        warm = (
+            "The stars are a little crowded right now and I couldn't finish that "
+            "reading — it's usually a brief rate limit on the free model. Give it "
+            "a few seconds and ask me again."
+        )
+        if not streamed_text:
+            yield f"data: {json.dumps({'type': 'token', 'content': warm})}\n\n"
+        yield f"data: {json.dumps({'type': 'error', 'message': warm})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
+        return
+
+    # Off-topic redirects and rate-limit fallbacks are built directly as
+    # AIMessage objects, not streamed token-by-token. Emit any text that
+    # hasn't been sent yet so the client always sees the full response.
+    final_text = _last_ai_text(final_messages)
+    if final_text:
+        if final_text.startswith(streamed_text):
+            remainder = final_text[len(streamed_text):]
+        elif not streamed_text:
+            remainder = final_text
+        else:
+            remainder = ""
+        if remainder:
+            yield f"data: {json.dumps({'type': 'token', 'content': remainder})}\n\n"
+
     try:
         save_session(session_id, final_messages, birth_details, final_birth_chart)
     except Exception:
-        pass  # never fail the response over a session save error
+        pass
 
     yield f"data: {json.dumps({'type': 'done', 'session_id': session_id})}\n\n"
 
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    if not req.message.strip():
-        raise HTTPException(status_code=400, detail="Message cannot be empty")
     return StreamingResponse(stream_agent(req), media_type="text/event-stream")
 
 
 @app.get("/session/{session_id}")
 def get_session(session_id: str):
-    """Returns session metadata — whether a chart exists, birth details, timestamps."""
     meta = get_session_meta(session_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -118,7 +158,7 @@ def health():
     return {"status": "ok", "version": "0.2.0"}
 
 
-# Serve the frontend — must come last so API routes take priority
+# Frontend served last so API routes take priority
 _FRONTEND = Path(__file__).parent.parent.parent / "frontend"
 if _FRONTEND.exists():
     app.mount("/", StaticFiles(directory=_FRONTEND, html=True), name="frontend")

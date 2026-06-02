@@ -117,6 +117,13 @@ def save_session(
         conn.commit()
 
 
+def delete_session(session_id: str) -> None:
+    """Remove a session entirely. Used by the eval harness to start clean."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+        conn.commit()
+
+
 def get_session_meta(session_id: str) -> Optional[dict]:
     """Lightweight check — returns metadata without deserializing messages."""
     with _connect() as conn:

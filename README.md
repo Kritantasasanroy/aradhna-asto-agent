@@ -27,7 +27,7 @@ START → router → reasoning ──→ tools → cache_chart → reasoning (lo
 
 | Component | Tool | Cost |
 |---|---|---|
-| LLM | OpenRouter — `openai/gpt-oss-120b:free` (120B params) | Free |
+| LLM | OpenRouter — `openai/gpt-oss-20b:free` (fast, reliable tool calling) | Free |
 | Ephemeris | pyswisseph (Swiss Ephemeris) | Free / open source |
 | Geocoding | Nominatim via geopy (OpenStreetMap) | Free |
 | Embeddings | sentence-transformers `all-MiniLM-L6-v2`, runs locally | Free |
@@ -70,7 +70,7 @@ backend/
   requirements.txt
 
 eval/
-  golden_set.jsonl   — 29 versioned test cases across 7 categories
+  golden_set.jsonl   — 30 versioned test cases across 7 categories
   run_eval.py        — one-command eval runner
   judge.py           — LLM-as-judge with 4-dimension rubric
   results/           — scorecard CSVs from each run
@@ -139,7 +139,7 @@ If the backend is unreachable (e.g. opening the HTML file directly), `agent.jsx`
 python eval/run_eval.py
 ```
 
-Server must be running. Runs all 29 golden set cases, prints a scorecard, saves a CSV to `eval/results/`. A score drop between runs is treated like a failing test.
+Server must be running. Runs all 30 golden set cases, prints a scorecard, saves a CSV to `eval/results/`. A score drop between runs is treated like a failing test.
 
 ---
 

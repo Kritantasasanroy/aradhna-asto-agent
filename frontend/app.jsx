@@ -46,7 +46,12 @@ function App() {
   const [error, setError] = useS(null);
   const [drawerOpen, setDrawerOpen] = useS(false);
 
-  const sessionId = useR("sess_" + Math.random().toString(36).slice(2, 10)).current;
+  const sessionId = useR((() => {
+    const KEY = "aradhana_session_id";
+    let id = localStorage.getItem(KEY);
+    if (!id) { id = "sess_" + Math.random().toString(36).slice(2, 10); localStorage.setItem(KEY, id); }
+    return id;
+  })()).current;
   const hasRead = useR(false);
   const cancelRef = useR(null);
 

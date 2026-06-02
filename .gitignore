@@ -12,6 +12,7 @@ node_modules/
 chroma_db/
 .pytest_cache/
 .mypy_cache/
-results/*.csv
+eval/results/*.csv
 *.db
 *.zip
+.vscode/

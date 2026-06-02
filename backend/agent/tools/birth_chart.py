@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date as date_cls, datetime
 from pathlib import Path
 
 import pytz
 from langchain_core.tools import tool
 
-# ephemeris data files live here — pyswisseph falls back to the built-in
-# Moshier ephemeris if the files aren't present, which is accurate enough
-# for most dates (1800–2400). Download the full files from astro.com/swisseph
-# and place them in backend/ephe/ for maximum precision.
+# pyswisseph falls back to the built-in Moshier ephemeris when data files
+# aren't present — accurate enough for 1800–2400. For maximum precision,
+# download files from astro.com/swisseph and place them in backend/ephe/.
 EPHE_PATH = str(Path(__file__).parent.parent.parent / "ephe")
 
 PLANETS = {
@@ -35,6 +34,27 @@ def _longitude_to_sign(longitude: float) -> tuple[str, float]:
     sign = SIGNS[int(longitude / 30) % 12]
     degree = round(longitude % 30, 2)
     return sign, degree
+
+
+def _validate_birth_details(date: str, time: str) -> str | None:
+    """Returns an error string for malformed or impossible dates/times, or None."""
+    try:
+        year, month, day = (int(p) for p in date.split("-"))
+    except ValueError:
+        return f"Date must be in YYYY-MM-DD format, got '{date}'."
+    try:
+        datetime(year, month, day)
+    except ValueError:
+        return f"'{date}' is not a real calendar date. Please double-check the day and month."
+
+    try:
+        hour, minute = (int(p) for p in time.split(":"))
+    except ValueError:
+        return f"Time must be in HH:MM 24-hour format, got '{time}'."
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return f"'{time}' is not a valid time of day. Use HH:MM between 00:00 and 23:59."
+
+    return None
 
 
 def _to_julian_day(date: str, time: str, timezone: str) -> float:
@@ -72,6 +92,10 @@ def compute_birth_chart(
     except ImportError:
         return {"error": "pyswisseph is not installed. Run: pip install pyswisseph"}
 
+    validation_error = _validate_birth_details(date, time)
+    if validation_error:
+        return {"error": validation_error}
+
     try:
         swe.set_ephe_path(EPHE_PATH)
         jd = _to_julian_day(date, time, timezone)
@@ -92,10 +116,9 @@ def compute_birth_chart(
                 "retrograde": pos[3] < 0,
             }
 
-        # Placidus house system — most widely used in Western astrology
+        # Placidus houses — most common system in Western astrology
         cusps, ascmc = swe.houses(jd, lat, lng, b"P")
 
-        # pyswisseph returns 12 cusps (indices 0–11), one per house
         houses: dict[str, dict] = {}
         for i in range(12):
             sign, degree = _longitude_to_sign(cusps[i])
@@ -108,7 +131,13 @@ def compute_birth_chart(
         asc_sign, asc_deg = _longitude_to_sign(ascmc[0])
         mc_sign, mc_deg = _longitude_to_sign(ascmc[1])
 
-        return {
+        try:
+            birth_date = datetime.strptime(date, "%Y-%m-%d").date()
+            is_future = birth_date > date_cls.today()
+        except ValueError:
+            is_future = False
+
+        result = {
             "planets": planets,
             "houses": houses,
             "ascendant": {"sign": asc_sign, "degree": asc_deg, "longitude": round(ascmc[0], 4)},
@@ -121,6 +150,13 @@ def compute_birth_chart(
                 "timezone": timezone,
             },
         }
+        if is_future:
+            result["future_date"] = True
+            result["note"] = (
+                "This birth date is in the future, so the chart is speculative. "
+                "Frame the reading as a possibility for who they may become, not as a lived chart."
+            )
+        return result
 
     except Exception as e:
         return {"error": f"Chart computation failed: {e}"}

@@ -58,6 +58,20 @@ function PinIcon({ pulse }) {
   );
 }
 
+// Inline field message — error (blocking), warn (amber), or neutral hint
+function Hint({ tone, children }) {
+  const color = tone === "error" ? "var(--error)" : tone === "warn" ? "var(--gold)" : "var(--ivory-faint)";
+  return (
+    <p style={{
+      margin: "8px 0 0", fontSize: 12, lineHeight: 1.5, color,
+      borderLeft: `2px solid ${color}`, paddingLeft: 10,
+      animation: "fadeUp 0.3s var(--ease) both",
+    }}>
+      {children}
+    </p>
+  );
+}
+
 function Toggle({ on, onClick }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={on} style={{
@@ -77,9 +91,25 @@ function Toggle({ on, onClick }) {
 
 function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, onCloseDrawer }) {
   const [pinPulse, setPinPulse] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const pinPulsed = useRef(false);
 
   const set = (k) => (e) => onChange({ ...values, [k]: e.target.value });
+
+  // ── validation ──
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const place = (values.place || "").trim();
+  const dateMissing = !values.date;
+  const dateFuture = values.date && values.date > todayISO;
+  const placeMissing = !place;
+  const placeVague = place && !place.includes(",");      // no country given
+  const timeMissing = !values.time && !values.approxTime;
+  const blocking = dateMissing || placeMissing;          // need at least date + place
+
+  const handleSubmit = () => {
+    if (blocking) { setShowErrors(true); return; }
+    onSubmit();
+  };
 
   const handlePlace = (e) => {
     if (!pinPulsed.current && e.target.value.length === 1) {
@@ -137,7 +167,9 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
         {/* Date */}
         <div style={{ marginBottom: 20 }}>
           <FieldLabel>Date of birth</FieldLabel>
-          <DarkInput type="date" value={values.date} onChange={set("date")} />
+          <DarkInput type="date" max={todayISO} value={values.date} onChange={set("date")} />
+          {showErrors && dateMissing && <Hint tone="error">Please add your date of birth.</Hint>}
+          {dateFuture && <Hint tone="warn">That date is in the future — I&rsquo;ll read this as a speculative chart, not a lived one.</Hint>}
         </div>
 
         {/* Time + approximate */}
@@ -157,6 +189,7 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
               An approximate time shifts your rising sign and house cusps. I&rsquo;ll read these gently rather than literally.
             </p>
           )}
+          {timeMissing && <Hint>Without a birth time I can still read your chart, but the rising sign and houses stay approximate.</Hint>}
         </div>
 
         {/* Place + pin */}
@@ -168,12 +201,14 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
             </span>
             <DarkInput leftPad value={values.place} onChange={handlePlace} placeholder="City, Country" />
           </div>
+          {showErrors && placeMissing && <Hint tone="error">Please add your place of birth.</Hint>}
+          {placeVague && <Hint>Add a country for accuracy, e.g. &ldquo;Jaipur, India&rdquo; rather than just &ldquo;Jaipur&rdquo;.</Hint>}
         </div>
 
         <div style={{ flex: 1, minHeight: 24 }} />
 
         {/* Read my chart */}
-        <ReadChartButton submitting={submitting} onClick={onSubmit} />
+        <ReadChartButton submitting={submitting} onClick={handleSubmit} />
       </div>
     </div>
   );

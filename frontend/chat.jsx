@@ -34,18 +34,47 @@ function UserMessage({ text }) {
   );
 }
 
+// Little hooks to keep the user engaged while tools run — shown one at a time
+// beneath the activity chip, rotating every few seconds.
+const LOADING_FACTS = [
+  "The Moon moves about one degree every two hours — your chart is a snapshot of a sky in constant motion.",
+  "Your rising sign can change every ~2 hours, which is why an accurate birth time matters so much.",
+  "Mercury appears to go retrograde 3–4 times a year — it never actually reverses, it just looks that way from Earth.",
+  "No two birth charts are ever exactly alike unless two people are born at the same moment in the same place.",
+  "The Sun spends about a month in each zodiac sign — that placement is your familiar “star sign.”",
+  "Saturn takes ~29.5 years to circle the zodiac, which is why your Saturn return arrives around age 29.",
+  "Astrologers read the sky as a map of meaning, not a set of commands — it describes weather, not fate.",
+  "Your Ascendant, Sun, and Moon together form the core trio most astrologers read first.",
+];
+
 // ---- Floating tool-activity chip ----
 function ToolIndicator({ label, leaving }) {
+  const [factIdx, setFactIdx] = useStateC(() => Math.floor(Math.random() * LOADING_FACTS.length));
+  const [factVisible, setFactVisible] = useStateC(true);
+
+  useEffectC(() => {
+    if (leaving) return;
+    const cycle = setInterval(() => {
+      setFactVisible(false);
+      setTimeout(() => {
+        setFactIdx((i) => (i + 1) % LOADING_FACTS.length);
+        setFactVisible(true);
+      }, 360);
+    }, 3200);
+    return () => clearInterval(cycle);
+  }, [leaving]);
+
   return (
-    <div style={{ display: "flex", justifyContent: "center", margin: "4px 0" }}>
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 10, margin: "4px 0",
+      animation: leaving ? "fadeUp 0.3s var(--ease) reverse forwards" : "fadeUp 0.35s var(--ease) both",
+    }}>
       <div style={{
         display: "inline-flex", alignItems: "center", gap: 11,
         padding: "9px 16px 9px 14px", borderRadius: 99,
         background: "rgba(18,26,46,0.78)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
         border: "1px solid var(--hairline-2)",
-        animation: leaving
-          ? "fadeUp 0.3s var(--ease) reverse forwards"
-          : "fadeUp 0.35s var(--ease) both, glowPulse 2.2s ease-in-out infinite",
+        animation: leaving ? "none" : "glowPulse 2.2s ease-in-out infinite",
       }}>
         <LotusMark size={16} spin glow />
         <span style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--ivory-dim)", letterSpacing: "0.02em" }}>
@@ -60,6 +89,16 @@ function ToolIndicator({ label, leaving }) {
           ))}
         </span>
       </div>
+      {!leaving && (
+        <p style={{
+          maxWidth: 420, margin: 0, textAlign: "center",
+          fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 13, lineHeight: 1.55,
+          color: "var(--ivory-faint)",
+          opacity: factVisible ? 1 : 0, transition: "opacity 0.36s var(--ease)",
+        }}>
+          {LOADING_FACTS[factIdx]}
+        </p>
+      )}
     </div>
   );
 }
