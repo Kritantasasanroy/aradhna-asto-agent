@@ -1,4 +1,4 @@
-/* global React, ReactDOM, CosmicBackground, AradhanaLogo, BirthDetailsForm, ChatPanel, runAgent */
+/* global React, ReactDOM, CosmicBackground, AradhanaLogo, BirthDetailsForm, ChatPanel, ConfirmationDialog, runAgent, runResume */
 const { useState: useS, useRef: useR, useEffect: useE } = React;
 
 let _id = 0;
@@ -45,22 +45,18 @@ function App() {
   const [streamingId, setStreamingId] = useS(null);
   const [error, setError] = useS(null);
   const [drawerOpen, setDrawerOpen] = useS(false);
+  const [pendingConfirmation, setPendingConfirmation] = useS(null);
 
   const sessionId = useR((() => {
     const KEY = "aradhana_session_id";
-    let id = localStorage.getItem(KEY);
-    if (!id) { id = "sess_" + Math.random().toString(36).slice(2, 10); localStorage.setItem(KEY, id); }
+    let id = sessionStorage.getItem(KEY);
+    if (!id) { id = "sess_" + Math.random().toString(36).slice(2, 10); sessionStorage.setItem(KEY, id); }
     return id;
   })()).current;
   const hasRead = useR(false);
   const cancelRef = useR(null);
 
   const busy = !!streamingId || !!tool;
-
-  const endTool = () => {
-    setTool((t) => (t ? { ...t, leaving: true } : null));
-    setTimeout(() => setTool(null), 320);
-  };
 
   const send = (text) => {
     if (busy || !text.trim()) return;
@@ -69,15 +65,25 @@ function App() {
     const botId = nextId();
     setMessages((prev) => [...prev, userMsg, { id: botId, role: "assistant", text: "" }]);
 
+    // Show the celestial loading indicator immediately — the chart is now computed
+    // in Python so there may be no tool events, but the model still needs a beat to
+    // think. This keeps the rolling messages visible during that wait.
+    setTool({ label: "consulting the stars", leaving: false });
+
     const firstTurn = !hasRead.current;
     cancelRef.current = runAgent(
       { message: text, session_id: sessionId, birth_details: { date: birth.date, time: birth.time, place: birth.place }, firstTurn },
       {
         onToolStart: (label) => setTool({ label, leaving: false }),
-        onToolEnd: endTool,
+        onToolEnd: () => {},  // keep the indicator up until real text starts streaming
         onToken: (tk) => {
+          setTool(null);  // first token arrived — dismiss the loading indicator
           setStreamingId(botId);
           setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: m.text + tk } : m));
+        },
+        onReplace: (full) => {
+          setStreamingId(botId);
+          setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: full } : m));
         },
         onDone: () => { hasRead.current = true; setStreamingId(null); },
         onError: (msg) => {
@@ -86,6 +92,9 @@ function App() {
           setTool(null);
           // drop the empty assistant placeholder
           setMessages((prev) => prev.filter((m) => !(m.id === botId && m.text === "")));
+        },
+        onConfirmationNeeded: (evt) => {
+          setPendingConfirmation({ ...evt, botId });
         },
       }
     );
@@ -102,6 +111,31 @@ function App() {
 
   useE(() => () => { if (cancelRef.current) cancelRef.current(); }, []);
 
+  const handleConfirmation = (confirmed) => {
+    if (!pendingConfirmation) return;
+    const { thread_id, session_id, botId } = pendingConfirmation;
+    setPendingConfirmation(null);
+    setTool({ label: "consulting the stars", leaving: false });
+    cancelRef.current = runResume(
+      { thread_id, session_id, confirmed, birth_details: { date: birth.date, time: birth.time, place: birth.place } },
+      {
+        onToolStart: (label) => setTool({ label, leaving: false }),
+        onToolEnd: () => {},
+        onToken: (tk) => {
+          setTool(null);
+          setStreamingId(botId);
+          setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: m.text + tk } : m));
+        },
+        onReplace: (full) => {
+          setStreamingId(botId);
+          setMessages((prev) => prev.map((m) => m.id === botId ? { ...m, text: full } : m));
+        },
+        onDone: () => { hasRead.current = true; setStreamingId(null); },
+        onError: (msg) => { setError(msg); setStreamingId(null); setTool(null); },
+      }
+    );
+  };
+
   const formProps = {
     values: birth, onChange: setBirth, onSubmit: readChart, submitting: busy,
   };
@@ -111,6 +145,14 @@ function App() {
       <CosmicBackground />
 
       {error && <ErrorToast message={error} onClose={() => setError(null)} />}
+
+      {pendingConfirmation && (
+        <ConfirmationDialog
+          data={pendingConfirmation}
+          onConfirm={() => handleConfirmation(true)}
+          onDecline={() => handleConfirmation(false)}
+        />
+      )}
 
       {/* Left panel (desktop) — in-flow flex item */}
       {!isMobile && (

@@ -6,13 +6,22 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agent.nodes import (
+    after_gate,
+    editor_node,
     reasoning_node,
     router_node,
     safety_node,
+    sensitivity_gate_node,
     should_use_tools,
 )
 from agent.state import AgentState
 from agent.tools import TOOLS
+
+try:
+    from langgraph.checkpoint.memory import MemorySaver
+    _checkpointer = MemorySaver()
+except ImportError:
+    _checkpointer = None
 
 
 def cache_birth_chart(state: AgentState) -> dict:
@@ -40,22 +49,33 @@ def build_graph() -> StateGraph:
     builder = StateGraph(AgentState)
 
     builder.add_node("router", router_node)
+    builder.add_node("sensitivity_gate", sensitivity_gate_node)
     builder.add_node("reasoning", reasoning_node)
     builder.add_node("tools", tool_node)
     builder.add_node("cache_chart", cache_birth_chart)
     builder.add_node("safety", safety_node)
+    builder.add_node("editor", editor_node)
 
     builder.set_entry_point("router")
 
+    # off_topic skips the sensitivity gate and reasoning entirely
     builder.add_conditional_edges(
         "router",
         lambda s: s["intent"],
         {
-            "chart_request": "reasoning",
-            "daily_horoscope": "reasoning",
-            "freeform": "reasoning",
+            "chart_request": "sensitivity_gate",
+            "daily_horoscope": "sensitivity_gate",
+            "freeform": "sensitivity_gate",
             "off_topic": "safety",
         },
+    )
+
+    # If the gate produced a cancellation message, skip reasoning and go to safety.
+    # Otherwise proceed to reasoning normally.
+    builder.add_conditional_edges(
+        "sensitivity_gate",
+        after_gate,
+        {"reasoning": "reasoning", "safety": "safety"},
     )
 
     builder.add_conditional_edges(
@@ -67,9 +87,13 @@ def build_graph() -> StateGraph:
     # after tools, cache any chart result then loop back to reasoning
     builder.add_edge("tools", "cache_chart")
     builder.add_edge("cache_chart", "reasoning")
-    builder.add_edge("safety", END)
 
-    return builder.compile()
+    # safety hands off to the editor (second agent), which softens tone on long
+    # readings and passes everything else through untouched
+    builder.add_edge("safety", "editor")
+    builder.add_edge("editor", END)
+
+    return builder.compile(checkpointer=_checkpointer)
 
 
 graph = build_graph()

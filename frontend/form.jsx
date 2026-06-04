@@ -97,14 +97,24 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
   const set = (k) => (e) => onChange({ ...values, [k]: e.target.value });
 
   // ── validation ──
-  const todayISO = new Date().toISOString().slice(0, 10);
+  // "Now" in IST (Asia/Kolkata, UTC+5:30), independent of the visitor's own clock —
+  // a birth date/time can't be later than the present moment in India. Shifting the
+  // epoch by +5.5h and reading the UTC fields gives IST wall-clock without a tz lib.
+  const istNow = new Date(Date.now() + 5.5 * 3600 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  const todayIST = `${istNow.getUTCFullYear()}-${pad(istNow.getUTCMonth() + 1)}-${pad(istNow.getUTCDate())}`;
+  const nowTimeIST = `${pad(istNow.getUTCHours())}:${pad(istNow.getUTCMinutes())}`;
+
   const place = (values.place || "").trim();
   const dateMissing = !values.date;
-  const dateFuture = values.date && values.date > todayISO;
+  const dateFuture = values.date && values.date > todayIST;
+  // A time only counts as "future" when the date is today — yesterday at 23:59 is fine.
+  const timeFuture = values.time && values.date === todayIST && values.time > nowTimeIST;
   const placeMissing = !place;
   const placeVague = place && !place.includes(",");      // no country given
   const timeMissing = !values.time && !values.approxTime;
-  const blocking = dateMissing || placeMissing;          // need at least date + place
+  // Need a valid (non-future) date + place; a future time also blocks.
+  const blocking = dateMissing || placeMissing || dateFuture || timeFuture;
 
   const handleSubmit = () => {
     if (blocking) { setShowErrors(true); return; }
@@ -167,15 +177,20 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
         {/* Date */}
         <div style={{ marginBottom: 20 }}>
           <FieldLabel>Date of birth</FieldLabel>
-          <DarkInput type="date" max={todayISO} value={values.date} onChange={set("date")} />
+          <DarkInput type="date" max={todayIST} value={values.date} onChange={set("date")} />
           {showErrors && dateMissing && <Hint tone="error">Please add your date of birth.</Hint>}
-          {dateFuture && <Hint tone="warn">That date is in the future — I&rsquo;ll read this as a speculative chart, not a lived one.</Hint>}
+          {dateFuture && <Hint tone="error">That date is in the future. Please enter your actual date of birth.</Hint>}
         </div>
 
         {/* Time + approximate */}
         <div style={{ marginBottom: 20 }}>
           <FieldLabel hint="HH : MM">Time of birth</FieldLabel>
-          <DarkInput type="time" value={values.time} onChange={set("time")} />
+          <DarkInput
+            type="time"
+            value={values.time}
+            onChange={set("time")}
+            max={values.date === todayIST ? nowTimeIST : undefined}
+          />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
             <Toggle on={values.approxTime} onClick={() => onChange({ ...values, approxTime: !values.approxTime })} />
             <span style={{ fontSize: 13, color: "var(--ivory-dim)" }}>Time is approximate</span>
@@ -189,6 +204,7 @@ function BirthDetailsForm({ values, onChange, onSubmit, submitting, isDrawer, on
               An approximate time shifts your rising sign and house cusps. I&rsquo;ll read these gently rather than literally.
             </p>
           )}
+          {timeFuture && <Hint tone="error">That time hasn&rsquo;t arrived yet today (IST). Please enter your real birth time.</Hint>}
           {timeMissing && <Hint>Without a birth time I can still read your chart, but the rising sign and houses stay approximate.</Hint>}
         </div>
 

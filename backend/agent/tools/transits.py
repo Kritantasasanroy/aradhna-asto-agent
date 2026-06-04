@@ -49,16 +49,18 @@ def _current_positions(date: str) -> dict:
 
 
 @tool
-def get_daily_transits(date: str, natal_chart: dict) -> dict:
+def get_daily_transits(date: str, natal_chart: dict = None) -> dict:
     """
-    Get current planetary transits and how they aspect the natal chart.
+    Get current planetary positions and how they aspect the natal chart.
 
     Finds active conjunctions, sextiles, squares, trines, and oppositions
     between today's sky and the user's natal planets. Returns the tightest
     transits sorted by orb so the most significant ones come first.
 
     date: YYYY-MM-DD — usually today's date
-    natal_chart: the output from compute_birth_chart
+    natal_chart: the full output from compute_birth_chart. If omitted or
+                 incomplete, the current sky positions are returned without
+                 aspect analysis — still useful for retrograde and sign questions.
     """
     try:
         import swisseph as swe  # noqa: F401
@@ -70,9 +72,7 @@ def get_daily_transits(date: str, natal_chart: dict) -> dict:
     except Exception as e:
         return {"error": f"Could not compute current positions: {e}"}
 
-    natal_planets = natal_chart.get("planets", {})
-    if not natal_planets:
-        return {"error": "natal_chart is missing planet data. Run compute_birth_chart first."}
+    natal_planets = (natal_chart or {}).get("planets", {})
 
     active_transits = []
     for t_planet, t_data in current.items():

@@ -2,7 +2,7 @@
 LLM-as-judge for the eval harness.
 
 Grades each response on four dimensions (1–5), one at a time.
-Uses the same OpenRouter key as the agent. Spot-check at least 10
+Uses the same Gemini key as the agent. Spot-check at least 10
 verdicts by hand before trusting the averages.
 """
 
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -46,25 +47,34 @@ RUBRIC = {
     ),
 }
 
-JUDGE_MODEL = os.getenv("JUDGE_MODEL", "openai/gpt-oss-20b:free")
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "gemini-flash-lite-latest")
+
+
+def _content_text(content) -> str:
+    """Normalise a model reply to a string. Gemini Flash-Lite returns content as a
+    list of typed parts ([{'type': 'text', 'text': '4'}]); calling .strip() on that
+    list is what was silently turning every judge score into None."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+    return str(content or "")
 
 
 def _build_judge_llm():
-    from langchain_openai import ChatOpenAI
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise EnvironmentError("OPENROUTER_API_KEY not set")
+        raise EnvironmentError("GEMINI_API_KEY not set")
 
-    return ChatOpenAI(
+    # thinking_budget=0 keeps the single-digit verdict fast; the judge should run
+    # on a different model from the agent so the two don't share a per-minute quota.
+    return ChatGoogleGenerativeAI(
         model=JUDGE_MODEL,
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1",
+        google_api_key=api_key,
         temperature=0,
-        default_headers={
-            "HTTP-Referer": "https://github.com/Kritantasasanroy/aradhna-asto-agent",
-            "X-Title": "aradhna-astroagent-eval",
-        },
+        thinking_budget=0,
     )
 
 
@@ -83,7 +93,13 @@ def score_response(
     except Exception:
         return {dim: None for dim in dims}
 
-    for dim in dims:
+    for i, dim in enumerate(dims):
+        # Space the four dimension calls out a little. Firing them back-to-back
+        # right after the agent's own burst is what trips the free-tier per-minute
+        # limit and leaves the scores empty.
+        if i:
+            time.sleep(1.5)
+
         prompt = (
             f"You are grading an AI astrology companion's response.\n\n"
             f"USER QUESTION:\n{question}\n\n"
@@ -93,17 +109,17 @@ def score_response(
             f"Reply with a single integer from 1 to 5. Nothing else. No explanation."
         )
         scores[dim] = None
-        for attempt in range(2):
+        for delay in (0, 4, 8):  # three attempts, backing off on rate limits
+            if delay:
+                time.sleep(delay)
             try:
                 result = llm.invoke(prompt)
-                raw = result.content.strip()
+                raw = _content_text(result.content).strip()
                 digit = next((c for c in raw if c.isdigit()), None)
                 scores[dim] = max(1, min(5, int(digit))) if digit else None
                 break
             except Exception as e:
                 if "429" in str(e) or "rate-limit" in str(e).lower():
-                    import time as _t
-                    _t.sleep(3)
                     continue
                 break
 

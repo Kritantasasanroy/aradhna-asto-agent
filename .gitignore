@@ -16,3 +16,4 @@ eval/results/*.csv
 *.db
 *.zip
 .vscode/
+.claude/

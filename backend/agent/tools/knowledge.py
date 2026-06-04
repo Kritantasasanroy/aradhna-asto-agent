@@ -53,6 +53,21 @@ def _index_notes(collection) -> None:
         collection.add(documents=docs, ids=ids, metadatas=metadatas)
 
 
+def warmup() -> None:
+    """Load the embedding model and build the Chroma index ahead of time.
+
+    The very first knowledge_lookup otherwise pays a one-time ~15-20s cost to load
+    the sentence-transformer weights and index the notes — which lands on an
+    unlucky user's first question. Calling this at server startup moves that cost
+    off the request path so every real lookup is fast.
+    """
+    try:
+        collection = _get_collection()
+        collection.query(query_texts=["sun in leo"], n_results=1)
+    except Exception:
+        pass  # warmup is best-effort; a failure just means the first lookup is slow
+
+
 @tool
 def knowledge_lookup(query: str) -> str:
     """

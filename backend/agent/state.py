@@ -29,7 +29,7 @@ class AgentState(TypedDict):
     # tracks which tools fired this turn — useful for eval assertions
     tool_calls_made: list[str]
 
-    # hard stop at 8 steps to prevent runaway loops
+    # bounded by STEP_LIMIT in nodes.py so the reason/tool loop can't run away
     step_count: int
 
     session_id: str

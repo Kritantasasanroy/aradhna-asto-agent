@@ -5,11 +5,13 @@
    so the UI can be previewed without a running backend.
 
    SSE events handled:
-     token      — streamed text chunk  (field: content)
-     tool_start — tool activity badge  (field: tool)
-     tool_end   — dismiss badge
-     done       — stream complete
-     error      — surface error to user
+     token               — streamed text chunk  (field: content)
+     replace             — swap the message for an edited version (field: content)
+     tool_start          — tool activity badge  (field: tool)
+     tool_end            — dismiss badge
+     confirmation_needed — pause for a human-in-the-loop confirmation
+     done                — stream complete
+     error               — surface error to user
 */
 
 const ENDPOINT = "/chat";
@@ -110,15 +112,11 @@ async function runMock(payload, h, signal) {
 }
 
 // ---- Real SSE --------------------------------------------------------------
-async function runRealSSE(payload, h, signal) {
-  const res = await fetch(ENDPOINT, {
+async function drainSSE(url, body, h, signal) {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: payload.message,
-      session_id: payload.session_id,
-      birth_details: payload.birth_details,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
 
@@ -143,13 +141,16 @@ async function runRealSSE(payload, h, signal) {
       try { evt = JSON.parse(line.slice(5).trim()); } catch { continue; }
 
       if (evt.type === "token") {
-        // backend sends { type: "token", content: "..." }
         h.onToken(evt.content ?? evt.value ?? evt.token ?? "");
+      } else if (evt.type === "replace") {
+        // editor's tone pass — swap the streamed draft for the polished version
+        if (h.onReplace) h.onReplace(evt.content ?? "");
       } else if (evt.type === "tool_start") {
-        // backend sends { type: "tool_start", tool: "function_name" }
         h.onToolStart(prettifyTool(evt.tool || evt.label || evt.name));
       } else if (evt.type === "tool_end") {
         h.onToolEnd();
+      } else if (evt.type === "confirmation_needed") {
+        if (h.onConfirmationNeeded) h.onConfirmationNeeded(evt);
       } else if (evt.type === "done") {
         h.onDone();
         return;
@@ -160,6 +161,32 @@ async function runRealSSE(payload, h, signal) {
     }
   }
   h.onDone();
+}
+
+async function runRealSSE(payload, h, signal) {
+  return drainSSE(ENDPOINT, {
+    message: payload.message,
+    session_id: payload.session_id,
+    birth_details: payload.birth_details,
+  }, h, signal);
+}
+
+// ---- Resume after human-in-the-loop confirmation --------------------------
+function runResume(resumePayload, handlers) {
+  const signal = { cancelled: false };
+  (async () => {
+    try {
+      await drainSSE("/resume", {
+        thread_id: resumePayload.thread_id,
+        session_id: resumePayload.session_id,
+        confirmed: resumePayload.confirmed,
+        birth_details: resumePayload.birth_details,
+      }, handlers, signal);
+    } catch (e) {
+      handlers.onError("Could not resume the reading. Please try again.");
+    }
+  })();
+  return () => { signal.cancelled = true; };
 }
 
 function runAgent(payload, handlers) {
@@ -180,3 +207,4 @@ function runAgent(payload, handlers) {
 }
 
 window.runAgent = runAgent;
+window.runResume = runResume;

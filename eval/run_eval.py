@@ -94,6 +94,9 @@ def call_agent(case: dict, client: httpx.Client, run_id: str) -> dict:
                 if t == "token":
                     response_text += event.get("content", "")
                     token_count += 1
+                elif t == "replace":
+                    # editor's polished version supersedes the streamed draft
+                    response_text = event.get("content", "")
                 elif t == "tool_start":
                     tool = event.get("tool", "")
                     if tool:
@@ -225,6 +228,7 @@ def run_case(case: dict, client: httpx.Client, run_id: str) -> dict:
         "tools_called": ", ".join(run["tools_seen"]) or "—",
         "latency_ms": run["latency_ms"],
         "tokens": run["token_count"] or "—",
+        "cost_usd": 0.00,  # free-tier Gemini does not bill per request
         "judge_helpfulness": judge_scores.get("helpfulness"),
         "judge_tone": judge_scores.get("tone"),
         "judge_groundedness": judge_scores.get("groundedness"),
@@ -266,8 +270,9 @@ def print_scorecard(results: list[dict]) -> None:
         if r.get("error"):
             print(f"       ^ {r['error'][:90]}")
 
+    total_tokens = sum(r["tokens"] for r in results if isinstance(r["tokens"], int))
     print(sep)
-    print(f"PASS: {passed}/{total}  |  p50: {p50}ms  |  p95: {p95}ms")
+    print(f"PASS: {passed}/{total}  |  p50: {p50}ms  |  p95: {p95}ms  |  tokens: {total_tokens}  |  cost: $0.00 (free tier)")
     print(f"Run:  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
 

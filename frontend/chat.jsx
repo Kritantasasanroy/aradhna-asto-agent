@@ -1,6 +1,48 @@
 /* global React */
 const { useState: useStateC, useRef: useRefC, useEffect: useEffectC } = React;
 
+// ---- Inline markdown: **bold** and *italic* only ----
+function renderInline(str) {
+  const parts = (str || "").split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*)/);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**") && p.length > 4)
+      return <strong key={i} style={{ fontWeight: 600, color: "var(--ivory)" }}>{p.slice(2, -2)}</strong>;
+    if (p.startsWith("*") && p.endsWith("*") && p.length > 2)
+      return <em key={i}>{p.slice(1, -1)}</em>;
+    return p;
+  });
+}
+
+// ---- Full markdown renderer: headers, bullets, bold, italic ----
+function MdText({ text }) {
+  if (!text) return null;
+  const lines = (text || "").split("\n");
+  return (
+    <>
+      {lines.map((line, i) => {
+        if (line.startsWith("### "))
+          return <div key={i} style={{ fontFamily: "var(--serif)", fontSize: 15.5, fontWeight: 600, color: "var(--gold)", margin: "16px 0 3px", letterSpacing: "0.01em" }}>{renderInline(line.slice(4))}</div>;
+        if (line.startsWith("## "))
+          return <div key={i} style={{ fontFamily: "var(--serif)", fontSize: 17, fontWeight: 600, color: "var(--ivory)", margin: "18px 0 4px" }}>{renderInline(line.slice(3))}</div>;
+        if (line.startsWith("# "))
+          return <div key={i} style={{ fontFamily: "var(--serif)", fontSize: 19, fontWeight: 600, color: "var(--ivory)", margin: "20px 0 6px" }}>{renderInline(line.slice(2))}</div>;
+        if (/^\*\s+/.test(line) || /^-\s+/.test(line)) {
+          const content = line.replace(/^[\*\-]\s+/, "");
+          return (
+            <div key={i} style={{ display: "flex", gap: 9, margin: "3px 0", paddingLeft: 2 }}>
+              <span style={{ color: "var(--gold)", flexShrink: 0, lineHeight: 1.72 }}>·</span>
+              <span>{renderInline(content)}</span>
+            </div>
+          );
+        }
+        if (line.trim() === "")
+          return <div key={i} style={{ height: 7 }} />;
+        return <div key={i}>{renderInline(line)}</div>;
+      })}
+    </>
+  );
+}
+
 // ---- Aradhana (assistant) message — no bubble, lotus beside first line ----
 function AradhanaMessage({ text, streaming }) {
   return (
@@ -10,9 +52,9 @@ function AradhanaMessage({ text, streaming }) {
       </div>
       <div style={{
         fontFamily: "var(--sans)", fontSize: 15.5, lineHeight: 1.72,
-        color: "var(--ivory)", whiteSpace: "pre-wrap", letterSpacing: "0.002em",
+        color: "var(--ivory)", letterSpacing: "0.002em", minWidth: 0,
       }}>
-        {text}
+        <MdText text={text} />
       </div>
     </div>
   );
@@ -263,4 +305,64 @@ function ChatPanel({ messages, tool, streamingId, onSend, onPrompt, onEditDetail
   );
 }
 
-Object.assign(window, { ChatPanel });
+// ---- Human-in-the-loop confirmation dialog --------------------------------
+function ConfirmationDialog({ data, onConfirm, onDecline }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(5,7,12,0.72)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
+      animation: "fadeUp 0.25s var(--ease) both",
+    }}>
+      <div style={{
+        maxWidth: 460, width: "calc(100% - 40px)",
+        background: "rgba(12,18,32,0.97)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid var(--hairline-2)", borderRadius: 18,
+        padding: "28px 28px 22px",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
+        animation: "msgRise 0.3s var(--ease) both",
+      }}>
+        <div style={{ display: "flex", gap: 14, marginBottom: 22 }}>
+          <div style={{ flexShrink: 0, marginTop: 3 }}>
+            <LotusMark size={20} glow />
+          </div>
+          <p style={{
+            margin: 0, fontFamily: "var(--serif)", fontSize: 15.5, lineHeight: 1.68,
+            color: "var(--ivory)", fontStyle: "italic",
+          }}>
+            {data.payload && data.payload.question
+              ? data.payload.question
+              : "Shall I continue with this reading?"}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            onClick={onDecline}
+            style={{
+              fontFamily: "var(--sans)", fontSize: 13.5,
+              color: "var(--ivory-dim)", background: "rgba(244,239,230,0.05)",
+              border: "1px solid var(--hairline-2)", borderRadius: 10,
+              padding: "9px 16px", cursor: "pointer",
+              transition: "all 0.2s var(--ease)",
+            }}
+          >
+            Not now
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              fontFamily: "var(--sans)", fontSize: 13.5,
+              color: "#1a1408", background: "linear-gradient(135deg, #E4C766, #C9A84C)",
+              border: "none", borderRadius: 10,
+              padding: "9px 20px", cursor: "pointer",
+            }}
+          >
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { ChatPanel, ConfirmationDialog });

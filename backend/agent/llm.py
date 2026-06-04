@@ -4,33 +4,29 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-
-def get_llm(temperature: float = 0.7) -> ChatOpenAI:
-    api_key = os.getenv("OPENROUTER_API_KEY")
+def get_llm(temperature: float = 0.7):
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise EnvironmentError(
-            "OPENROUTER_API_KEY is not set. "
-            "Get a free key at https://openrouter.ai and add it to backend/.env"
+            "GEMINI_API_KEY is not set. "
+            "Get a free key at https://aistudio.google.com and add it to backend/.env"
         )
 
-    model = os.getenv("LLM_MODEL", "openai/gpt-oss-20b:free")
-    app_name = os.getenv("OPENROUTER_APP_NAME", "aradhna-astroagent")
+    model = os.getenv("LLM_MODEL", "gemini-flash-lite-latest")
 
-    return ChatOpenAI(
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    # thinking_budget=0 disables Gemini 2.5's internal reasoning pass — this is a
+    # direct constructor field in langchain-google-genai (not generation_config),
+    # and it cuts latency from ~30-37s per call down to ~2-4s.
+    return ChatGoogleGenerativeAI(
         model=model,
-        api_key=api_key,
-        base_url=OPENROUTER_BASE_URL,
+        google_api_key=api_key,
         temperature=temperature,
-        max_retries=4,
-        timeout=60,
-        default_headers={
-            "HTTP-Referer": "https://github.com/Kritantasasanroy/aradhna-asto-agent",
-            "X-Title": app_name,
-        },
+        thinking_budget=0,
+        max_output_tokens=2048,
     )

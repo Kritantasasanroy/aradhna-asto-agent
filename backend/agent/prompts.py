@@ -17,8 +17,10 @@ the exact location.
 looks off and ask them to confirm.
      - If it returns "future_date": true, the chart is speculative. Frame it as \
 a possibility for who they may become, not a lived chart.
-  3. When interpreting any placement, call knowledge_lookup to ground the reading \
-in established astrological meaning.
+  3. Before writing your interpretation, you MUST call knowledge_lookup for each \
+key placement you discuss — at minimum the Sun, Moon, and Ascendant. Do not write \
+the interpretation from memory alone. The knowledge base keeps readings grounded \
+in established astrological tradition rather than generic statements.
 
 When someone asks about today's energy, current transits, or whether a planet is \
 retrograde right now, you MUST call get_daily_transits — you cannot know today's \
@@ -72,27 +74,66 @@ CONTEXT FROM STATE: {context}
 """
 
 
+def _format_chart_facts(birth_chart: dict) -> str:
+    """Render the chart as compact, readable facts for the model to interpret."""
+    lines = []
+    asc = birth_chart.get("ascendant", {})
+    mc = birth_chart.get("midheaven", {})
+    if asc:
+        lines.append(f"Ascendant (Rising): {asc.get('sign')} {asc.get('degree')}°")
+    if mc:
+        lines.append(f"Midheaven (MC): {mc.get('sign')} {mc.get('degree')}°")
+
+    for name, p in birth_chart.get("planets", {}).items():
+        retro = " (retrograde)" if p.get("retrograde") else ""
+        lines.append(f"{name}: {p.get('sign')} {p.get('degree')}°{retro}")
+
+    houses = birth_chart.get("houses", {})
+    if houses:
+        cusps = ", ".join(
+            f"H{ i+1 }: {houses.get(f'house_{i+1}', {}).get('sign')}" for i in range(12)
+        )
+        lines.append(f"House cusps — {cusps}")
+    return "\n".join(lines)
+
+
 def build_system_prompt(today: str, birth_details=None, birth_chart=None) -> str:
     import json
 
     context_parts = []
 
+    # Drop blank fields — an untouched form posts {"date": "", "place": ""}, which is
+    # "no details", not "details provided". Treating empties as real confused the model.
+    if birth_details:
+        birth_details = {
+            k: v for k, v in dict(birth_details).items()
+            if isinstance(v, str) and v.strip()
+        } or None
+
     if birth_details:
         context_parts.append(f"Birth details provided: {json.dumps(birth_details)}")
+        if not birth_details.get("time"):
+            context_parts.append(
+                "NOTE: no birth time was given — tell the user the Ascendant (rising sign) "
+                "and house cusps are approximate without a birth time, and offer to refine "
+                "if they can find it."
+            )
     else:
         context_parts.append("No birth details provided yet.")
 
     if birth_chart:
-        planets = birth_chart.get("planets", {})
-        asc = birth_chart.get("ascendant", {})
-        highlights = {
-            "ascendant": asc.get("sign"),
-            "sun": planets.get("Sun", {}).get("sign"),
-            "moon": planets.get("Moon", {}).get("sign"),
-            "chart_computed": True,
-        }
-        context_parts.append(f"Birth chart already computed: {json.dumps(highlights)}")
-        context_parts.append("Full chart data is in the conversation history above.")
+        # The chart may have been computed in Python (not via a tool call in this
+        # conversation), so embed the full data directly — don't assume it's in history.
+        context_parts.append(
+            "The birth chart is ALREADY COMPUTED (real Swiss Ephemeris data below). "
+            "Do not ask for birth details again; interpret directly from these facts:\n"
+            + _format_chart_facts(birth_chart)
+        )
+        if birth_chart.get("future_date"):
+            context_parts.append(
+                "NOTE: this birth date is in the future, so the chart is speculative — "
+                "frame it as who they may become, not a lived chart."
+            )
     else:
         context_parts.append("Birth chart has not been computed yet.")
 
